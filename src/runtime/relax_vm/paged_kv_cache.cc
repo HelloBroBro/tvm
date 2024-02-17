@@ -153,12 +153,14 @@ struct Sequence {
 /*!
  * \brief The rotary embedding mode adopted by the paged KV cache
  * when computing attention.
+ * "None" means RoPE is never applied to q and k.
  * "Normal" means RoPE is computed in a standalone kernel.
  * "Inline" means RoPE is computed on-the-fly in attention kernels.
  */
 enum class RoPEMode : int {
-  kNormal = 0,
-  kInline = 1,
+  kNone = 0,
+  kNormal = 1,
+  kInline = 2,
 };
 
 /*!
@@ -744,6 +746,13 @@ class PagedAttentionKVCacheObj : public AttentionKVCache {
     AttentionInternal(layer_id, q_data, k_data, v_data, o_data);
   }
 
+  NDArray GetQueryPositions() const final {
+    CHECK(!dirty_aux_data_device_)
+        << "The auxiliary arrays are not synchronized to device. Please call "
+           "`BeginForward` to synchronize before calling `GetQueryPositions`.";
+    return q_rope_position_map_view_;
+  };
+
   void DebugGetKV(int64_t seq_id, int64_t start_pos, int64_t end_pos, NDArray k_data,
                   NDArray v_data) final {
     CHECK(f_debug_get_kv_.defined())
@@ -1231,6 +1240,8 @@ TVM_REGISTER_GLOBAL("vm.builtin.paged_attention_kv_cache_begin_forward")
     .set_body_method<PagedAttentionKVCache>(&PagedAttentionKVCacheObj::BeginForward);
 TVM_REGISTER_GLOBAL("vm.builtin.paged_attention_kv_cache_end_forward")
     .set_body_method<PagedAttentionKVCache>(&PagedAttentionKVCacheObj::EndForward);
+TVM_REGISTER_GLOBAL("vm.builtin.paged_attention_kv_cache_get_query_positions")
+    .set_body_method<PagedAttentionKVCache>(&PagedAttentionKVCacheObj::GetQueryPositions);
 TVM_REGISTER_GLOBAL("vm.builtin.paged_attention_kv_cache_debug_get_kv")
     .set_body_method<PagedAttentionKVCache>(&PagedAttentionKVCacheObj::DebugGetKV);
 TVM_REGISTER_GLOBAL("vm.builtin.paged_attention_kv_cache_attention")
