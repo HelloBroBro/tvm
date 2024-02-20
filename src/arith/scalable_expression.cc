@@ -17,16 +17,38 @@
  * under the License.
  */
 
-export {
-  Scalar, DLDevice, DLDataType,
-  PackedFunc, Module, NDArray,
-  TVMArray, TVMObject, VirtualMachine,
-  InitProgressCallback, InitProgressReport,
-  ArtifactCache, Instance, instantiate, hasNDArrayInCache, deleteNDArrayCache
-} from "./runtime";
-export { Disposable, LibraryProvider } from "./types";
-export { RPCServer } from "./rpc_server";
-export { wasmPath } from "./support";
-export { detectGPUDevice, GPUDeviceDetectOutput } from "./webgpu";
-export { assert } from "./support";
-export { createPolyfillWASI } from "./compact";
+/*!
+ * \file tvm/arith/scalable_expression.cc
+ * \brief Analyze scalable expressions.
+ */
+
+#include "scalable_expression.h"
+
+#include <tvm/tir/expr.h>
+#include <tvm/tir/op.h>
+
+#include "./pattern_match.h"
+
+namespace tvm {
+namespace arith {
+
+bool IsVScaleCall(const PrimExpr& expr) {
+  if (auto call = expr.as<tir::CallNode>()) {
+    return call->op.same_as(tir::builtin::vscale());
+  }
+  return false;
+}
+
+std::optional<int> ExtractVscaleFactor(const PrimExpr& lanes) {
+  PVar<IntImm> multiplier;
+  PCallExpr<PVscaleOp> vscale;
+
+  if (PMatchesOneOf(multiplier * vscale, vscale * multiplier).Match(lanes)) {
+    return multiplier.Eval()->value;
+  } else {
+    return std::nullopt;
+  }
+}
+
+}  // namespace arith
+}  // namespace tvm

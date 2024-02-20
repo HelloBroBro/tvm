@@ -17,16 +17,36 @@
  * under the License.
  */
 
-export {
-  Scalar, DLDevice, DLDataType,
-  PackedFunc, Module, NDArray,
-  TVMArray, TVMObject, VirtualMachine,
-  InitProgressCallback, InitProgressReport,
-  ArtifactCache, Instance, instantiate, hasNDArrayInCache, deleteNDArrayCache
-} from "./runtime";
-export { Disposable, LibraryProvider } from "./types";
-export { RPCServer } from "./rpc_server";
-export { wasmPath } from "./support";
-export { detectGPUDevice, GPUDeviceDetectOutput } from "./webgpu";
-export { assert } from "./support";
-export { createPolyfillWASI } from "./compact";
+/*!
+ * \file tvm/arith/scalable_expression.h
+ * \brief Analyze scalable expressions.
+ */
+
+#ifndef TVM_ARITH_SCALABLE_EXPRESSION_H_
+#define TVM_ARITH_SCALABLE_EXPRESSION_H_
+
+#include <tvm/ir/expr.h>
+
+#include <optional>
+
+namespace tvm {
+namespace arith {
+
+/*!
+ * \brief Check if an expr is a call to the vscale intrinsic.
+ * \param expr The expr to check
+ * \return True if the expr is a call to the vscale intrinsic, false if not.
+ */
+bool IsVScaleCall(const PrimExpr& expr);
+
+/*!
+ * \brief Returns the vscale multiplier as a nullable type
+ * \param lanes The scalable lanes as a PrimExpr
+ * \return vscale multiplier as std::optional<int>
+ */
+std::optional<int> ExtractVscaleFactor(const PrimExpr& lanes);
+
+}  // namespace arith
+}  // namespace tvm
+
+#endif  // TVM_ARITH_SCALABLE_EXPRESSION_H_
