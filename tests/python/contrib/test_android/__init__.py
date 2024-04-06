@@ -14,7 +14,5 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.runtime"""
 
-from .runner import *
-from .jit import *
+""" Testing infrastructure for Android """
