@@ -92,7 +92,7 @@ class DModule(DRef):
 
     def __init__(self, dref: DRef, session: "Session") -> None:
         self.handle = dref.handle
-        del dref.handle
+        dref.handle = None
         self.session = session
 
     def __getitem__(self, name: str) -> DPackedFunc:
@@ -572,6 +572,29 @@ class ProcessSession(Session):
         config = pickle.dumps(full_config)
         func = self.get_global_func("runtime.disco._configure_structlog")
         func(config, os.getpid())
+
+
+@register_func("runtime.disco.create_socket_session_local_workers")
+def _create_socket_session_local_workers(num_workers) -> Session:
+    """Create the local session for each distributed node over socket session."""
+    return ProcessSession(num_workers)
+
+
+@register_object("runtime.disco.SocketSession")
+class SocketSession(Session):
+    """A Disco session backed by socket-based multi-node communication."""
+
+    def __init__(
+        self, num_nodes: int, num_workers_per_node: int, num_groups: int, host: str, port: int
+    ) -> None:
+        self.__init_handle_by_constructor__(
+            _ffi_api.SocketSession,  # type: ignore # pylint: disable=no-member
+            num_nodes,
+            num_workers_per_node,
+            num_groups,
+            host,
+            port,
+        )
 
 
 @register_func("runtime.disco._configure_structlog")
