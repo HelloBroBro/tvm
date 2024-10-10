@@ -692,6 +692,36 @@ class ScatterElements(OnnxOpConverter):
         return relax.op.scatter_elements(inputs[0], inputs[1], inputs[2], axis=axis)
 
 
+class ScatterND(OnnxOpConverter):
+    """Convert an onnx ScatterND node into an equivalent Relax expression."""
+
+    @staticmethod
+    def _reduction_check(attr, valid_reductions: List[str]):
+        reduction = attr.get("reduction", None)
+        reduction = reduction or b"update"
+        reduction = reduction.decode("utf-8")
+        reduction = "update" if reduction == "none" else reduction
+        assert (
+            reduction in valid_reductions
+        ), f"Only {valid_reductions} reductions are supported, but {reduction} is gotten"
+
+        return reduction
+
+    @classmethod
+    def _impl_v11(cls, bb, inputs, attr, params):
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2])
+
+    @classmethod
+    def _impl_v16(cls, bb, inputs, attr, params):
+        reduction = cls._reduction_check(attr, ["update", "add", "mul"])
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2], reduction)
+
+    @classmethod
+    def _impl_v18(cls, bb, inputs, attr, params):
+        reduction = cls._reduction_check(attr, ["update", "add", "mul", "min", "max"])
+        return relax.op.scatter_nd(inputs[0], inputs[1], inputs[2], reduction)
+
+
 class Size(OnnxOpConverter):
     """Convert an onnx Size node into an equivalent Relax expression."""
 
@@ -1551,6 +1581,35 @@ class Slice(OnnxOpConverter):
 
 class Pad(OnnxOpConverter):
     """Converts an onnx Pad node into an equivalent Relax expression."""
+
+    @classmethod
+    def _impl_v2(cls, bb, inputs, attr, params):
+        pads = attr.get("pads")
+        pads = relax.const(_np.array(pads), inputs[0].struct_info.shape[0].dtype)
+        constant_value = attr.get("value")
+        if constant_value is None:
+            constant_value = 0.0
+
+        if isinstance(pads, relax.Constant):
+            pad_before, pad_after = _np.split(pads.data.numpy(), 2)
+            pad_before = _np.ndarray.tolist(pad_before)
+            pad_after = _np.ndarray.tolist(pad_after)
+        else:
+            raise ValueError("Dynamic pads are not supported yet.")
+
+        pad_mode = attr.get("mode", b"constant").decode("utf-8")
+        if not pad_mode in ["constant", "edge", "reflect"]:
+            raise tvm.error.OpAttributeInvalid(
+                "Value " + pad_mode + ' in attribute "mode" is invalid for operator Pad.'
+            )
+
+        if pad_mode == "constant":
+            return bb.emit_te(topi.nn.pad, inputs[0], pad_before, pad_after, constant_value)
+        elif pad_mode == "reflect":
+            return bb.emit_te(topi.nn.mirror_pad, inputs[0], pad_before, pad_after, "REFLECT")
+        else:
+            # TODO(gigiblender) Support edge mode.
+            raise NotImplementedError("Pad mode {} not implemented".format(pad_mode))
 
     @classmethod
     def _impl_v11(cls, bb, inputs, attr, params):
@@ -2482,6 +2541,14 @@ class Unique(OnnxOpConverter):
         return relax.op.unique(data, sorted=sorted, axis=axis)
 
 
+class NonZero(OnnxOpConverter):
+    """Converts an onnx NonZero node into an equivalent Relax expression."""
+
+    @classmethod
+    def _impl_v9(cls, bb, inputs, attr, params):
+        return relax.op.nonzero(inputs[0])
+
+
 class HardSigmoid(OnnxOpConverter):
     """Converts an onnx HardSigmoid node into an equivalent Relax expression."""
 
@@ -2819,7 +2886,7 @@ def _get_convert_map():
         # "GatherND": GatherND,
         "Scatter": Scatter,
         "ScatterElements": ScatterElements,
-        # "ScatterND": ScatterND,
+        "ScatterND": ScatterND,
         # "Compress": Compress,
         "Size": Size,
         # "EyeLike": EyeLike,
@@ -2867,7 +2934,7 @@ def _get_convert_map():
         "Range": Range,
         "OneHot": OneHot,
         "Unique": Unique,
-        # "NonZero": NonZero,
+        "NonZero": NonZero,
         # "If": If,
         # "LRN": LRN,
         # "MaxRoiPool": MaxRoiPool,
